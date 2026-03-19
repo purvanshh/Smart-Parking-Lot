@@ -1,66 +1,70 @@
 # Smart Parking Occupancy & Availability API
 
-Real-time computer vision pipeline that turns a parking-lot video feed into **stable slot occupancy**, **parking durations**, and **operational analytics** via a clean FastAPI interface.
+Production-style computer vision backend that converts parking-lot video into stable occupancy state, durations, and operational analytics through FastAPI.
 
-## Problem statement (real-world)
+## Problem this solves
 
-Parking facilities often lack real-time visibility into which slots are occupied. This increases driver search time, reduces space utilization, and makes operational decisions reactive instead of data-driven.
+Parking operations need reliable slot-level visibility, not just raw detections. Real deployments fail when outputs flicker, IDs switch, or occlusions break logic.
 
-This project detects and tracks vehicles from a fixed-camera video feed, maps them to predefined slot polygons, and serves **live occupancy + analytics** through an API.
+This system focuses on **robust reasoning over time**:
+- detects and tracks vehicles,
+- maps them to slot polygons,
+- stabilizes occupancy with temporal rules,
+- exposes actionable API outputs for operations.
 
-## Key features (what makes this interview-ready)
-
-- **Real-time pipeline**: Video → YOLOv8 detection → tracking → slot mapping → occupancy → API
-- **Robust occupancy**: debouncing + occlusion tolerance to prevent flicker
-- **Time-based reasoning**: entry/exit events and per-vehicle **parking duration**
-- **Decision support**: utilization analytics + rule-based alerts (overstay, lot almost full)
-- **Modular design**: detection / tracking / occupancy / analytics are decoupled
-
-## System architecture (high level)
+## System architecture
 
 ```text
-Video (OpenCV) → Detection (YOLOv8) → Tracking (MOT IDs) → Slot mapping (polygons)
-→ Occupancy engine (debounce + duration) → Analytics/alerts → FastAPI
+Video feed
+  -> YOLOv8 detection
+  -> IoU multi-object tracker
+  -> slot mapping (polygon containment)
+  -> occupancy engine (debounce + occlusion handling + durations)
+  -> analytics + alerts
+  -> FastAPI endpoints
 ```
 
-### Core modules
+Core principle: this is not only detection, it is a **stateful real-time system**.
 
-- **Detector**: vehicle-only detection (car/truck/bus/motorcycle), configurable confidence threshold
-- **Tracker**: stable `track_id` across frames (IoU-based; ByteTrack-ready interface)
-- **SlotManager**: assigns box center points to slot polygons (`app/slots/slots.json`)
-- **OccupancyEngine**: stable slot state, entry/exit/duration, completed sessions
-- **AnalyticsEngine**: utilization, busiest/least-used slots, overstay + almost-full alerts
+## Engineering decisions
 
-## Tech stack
+- **Temporal smoothing**: slot state changes are debounced to prevent flicker.
+- **Occlusion handling**: slots are not cleared immediately when detections drop.
+- **IoU tracker tradeoff**: lightweight and fast for demo/internship scope; heavier trackers (e.g. ByteTrack) can improve difficult scenes.
+- **Operational outputs**: API serves occupancy, durations, sessions, and alerts.
 
-- **Python**, **FastAPI**
-- **YOLOv8 (Ultralytics)**, **OpenCV**
-- **Tracking**: IoU-based MOT (ByteTrack-ready interface)
-- **Storage**: in-memory state (sessions + analytics snapshots)
-- **Optional**: ONNX Runtime path, Docker container
+## Features
 
-## API
+- Real-time pipeline: video -> detection -> tracking -> occupancy
+- Stable slot status with debounce + timeout logic
+- Entry/exit timestamps and parking duration per track
+- Analytics: utilization, busiest/least-used slots
+- Alerts: overstay and lot almost full
+- Graceful idle mode if model/video is unavailable (API stays up)
+
+## API reference
 
 Base URL: `http://127.0.0.1:8000`
 
 ### `GET /health`
 
-Returns liveness + pipeline timing signal.
-
-Example response:
+Returns runtime status and pipeline health.
 
 ```json
 {
   "status": "ok",
-  "last_update_ts": 1710000000.12
+  "pipeline_status": "running",
+  "video_loaded": true,
+  "model_loaded": true,
+  "last_frame_ts": 1710000000.12,
+  "fps_estimate": 19.84,
+  "active_tracks": 2
 }
 ```
 
 ### `GET /slots`
 
-Slot-level stable occupancy state (debounced, occlusion-tolerant).
-
-Example response:
+Stable slot state:
 
 ```json
 {
@@ -71,10 +75,6 @@ Example response:
 
 ### `GET /summary`
 
-Aggregate counts.
-
-Example response:
-
 ```json
 {
   "total_slots": 2,
@@ -84,10 +84,6 @@ Example response:
 ```
 
 ### `GET /analytics`
-
-Operational insights computed periodically (not every frame).
-
-Example response:
 
 ```json
 {
@@ -100,14 +96,7 @@ Example response:
 }
 ```
 
-Field notes:
-- `utilization[slot]`: \(occupied\_time / total\_time\) over the analytics window since the engine started (includes active vehicles best-effort).
-
 ### `GET /sessions?limit=50`
-
-Recent completed parking sessions (most recent last).
-
-Example response:
 
 ```json
 [
@@ -123,17 +112,8 @@ Example response:
 
 ### `GET /alerts`
 
-Active alerts derived from current occupancy + durations.
-
-Example response:
-
 ```json
 [
-  {
-    "type": "lot_almost_full",
-    "timestamp": 1710000200.5,
-    "metadata": { "available": 1, "total": 10, "ratio": 0.1 }
-  },
   {
     "type": "overstay",
     "timestamp": 1710000212.1,
@@ -144,140 +124,101 @@ Example response:
 
 ## Setup
 
-### 1) Create a virtual environment
+### 1) Environment
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-```
-
-### 2) Install dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-### 3) Provide inputs
+### 2) Data and model
 
-- **Video**: `data/parking_video.MOV` (or update `VIDEO_PATH` if different)
-- **Slots**: `app/slots/slots.json` (slot_id → polygon vertices)
-- **Model**: auto-download via Ultralytics (default `MODEL_PATH=yolov8n.pt`)
-  - First run downloads + caches weights automatically.
-  - If you want to use local weights, set `MODEL_PATH=/path/to/weights.pt`.
+- Place video in `data/` (default: `data/parking_video.MOV`)
+- Slot polygons in `app/slots/slots.json`
+- Model defaults to `yolov8n.pt` (auto-download on first run)
+- Data link (not committed): [OneDrive dataset](https://onedrive.live.com/?redeem=aHR0cHM6Ly8xZHJ2Lm1zL2YvcyFBanVMOExkRmtDaFppT1ZpcjB2Uk1QUGpMdUZUV2c_ZT1oaTJoZTM&id=59289045B7F08B3B!144101&cid=59289045B7F08B3B&sb=name&sd=1)
 
-### 3.1) Data source (not committed to repo)
-
-Project video/data files are intentionally not uploaded to Git.
-
-Download from OneDrive and place files in `data/`:
-
-- [Parking data (OneDrive)](https://onedrive.live.com/?redeem=aHR0cHM6Ly8xZHJ2Lm1zL2YvcyFBanVMOExkRmtDaFppT1ZpcjB2Uk1QUGpMdUZUV2c_ZT1oaTJoZTM&id=59289045B7F08B3B!144101&cid=59289045B7F08B3B&sb=name&sd=1)
-
-### 4) Run the API
+### 3) One-command run
 
 ```bash
 uvicorn main:app --reload
 ```
 
-## Quick run commands + expected output
-
-### Validate video is readable by OpenCV
+### 4) Quick verification
 
 ```bash
 python3 -c "import cv2; cap=cv2.VideoCapture('data/parking_video.MOV'); print('opened=', cap.isOpened())"
-```
-
-Expected:
-
-```text
-opened= True
-```
-
-### Start server with explicit paths
-
-```bash
-MODEL_PATH="models/yolov8n.pt" VIDEO_PATH="data/parking_video.MOV" uvicorn main:app --reload
-```
-
-Expected logs (sample):
-
-```text
-INFO:     Uvicorn running on http://127.0.0.1:8000
-INFO smart_parking - Video opened: data/parking_video.MOV
-INFO smart_parking - Detector loaded: models/yolov8n.pt
-INFO smart_parking - Processed frame=... detections=... tracked=...
-```
-
-### Check live endpoints
-
-```bash
 curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8000/slots
-curl http://127.0.0.1:8000/summary
-curl http://127.0.0.1:8000/analytics
 ```
 
-Expected (example):
+## Configuration
 
-```json
-{"status":"ok","last_update_ts":1710000000.12}
-```
+All runtime knobs are centralized in `app/config/settings.py` and exposed via env vars:
 
-## Configuration (deployment-friendly)
-
-All knobs are environment-driven via `app/config/settings.py`. Common ones:
-
-- `FRAME_STRIDE=3` (process every 3rd frame)
-- `DETECTION_CONF=0.3`
-- `DEBOUNCE_FRAMES=4`
-- `CLEAR_TIMEOUT_S=1.5`
-- `OVERSTAY_THRESHOLD_S=90`
-- `ANALYTICS_PERIOD_S=2.0`
+- `MODEL_PATH`
+- `VIDEO_PATH`
+- `DETECTION_CONF`
+- `FRAME_STRIDE`
+- `TRACKER_MAX_AGE_S`
+- `DEBOUNCE_FRAMES`
+- `DEMO_MODE`
+- `ANALYTICS_PERIOD_S`
+- `METRICS_PERIOD_S`
 
 Example:
 
 ```bash
-FRAME_STRIDE=3 DETECTION_CONF=0.35 OVERSTAY_THRESHOLD_S=120 uvicorn main:app --reload
+DEMO_MODE=1 FRAME_STRIDE=1 DETECTION_CONF=0.05 TRACKER_MAX_AGE_S=4.0 DEBOUNCE_FRAMES=8 uvicorn main:app --reload
 ```
 
-## Demo expectations (what to look for)
+## Demo walkthrough (60-90 seconds)
 
-- `/slots` is **stable** (no flicker) even with brief occlusions
-- `/sessions` accumulates completed sessions with durations
-- `/analytics` evolves over time (utilization + busiest slots)
-- `/alerts` triggers when rules match (overstay / almost-full)
+### Commands
+
+```bash
+source .venv/bin/activate
+uvicorn main:app --reload
+```
+
+### What to show
+
+1. Terminal logs: `event=video_opened`, `event=model_loaded`, periodic `event=pipeline_summary`
+2. `GET /health` to show FPS, active tracks, loaded status
+3. `GET /slots` and `GET /summary` while video is running
+4. `GET /analytics`, `GET /sessions`, `GET /alerts`
+
+### What to say (short script)
+
+- “This is a real-time backend system, not just a detector.”
+- “We detect + track vehicles, then apply temporal logic to produce stable occupancy.”
+- “Debounce and occlusion tolerance prevent flicker and false transitions.”
+- “The API serves both live status and operational insights like utilization and overstay alerts.”
+
+## Limitations
+
+- Fixed-camera and manual slot calibration.
+- IoU tracker is lightweight; crowded scenes may benefit from stronger MOT.
+- In-memory persistence only (single-process scope).
 
 ## Repo structure
 
 ```text
 app/
-  api/routes.py
-  analytics/engine.py
-  config/settings.py
-  detection/detector.py
-  tracking/tracker.py
-  occupancy/engine.py
-  slots/slot_manager.py
-  slots/slots.json
-  utils/geometry.py
+  api/
+  analytics/
+  config/
+  detection/
+  profiling/
+  tracking/
+  occupancy/
+  slots/
 data/
 models/
 main.py
 requirements.txt
-README.md
 ```
 
-> `data/` and model binaries are gitignored to keep the repository lightweight.
-
-## Limitations (intentional, honest)
-
-- Fixed-camera assumption; slot polygons are manually configured.
-- Tracker is IoU-based (fast + simple); ByteTrack can improve re-identification under heavy occlusion.
-- In-memory state only (no DB). Suitable for a single-process demo; production would persist sessions/metrics.
-
-## Future improvements (credible next steps)
-
-- Replace IoU tracker with ByteTrack + tuned parameters for dense scenes.
-- Add persistent storage for sessions + analytics (SQLite/Postgres).
-- Add a lightweight dashboard (optional) or Prometheus metrics export.
+`data/` and large model binaries are gitignored to keep the repository clean.
 

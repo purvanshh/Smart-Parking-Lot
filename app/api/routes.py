@@ -1,17 +1,23 @@
 from __future__ import annotations
 
+from typing import Callable, Dict
+
 from fastapi import APIRouter
 
 from app.analytics.engine import AnalyticsEngine
 from app.occupancy.engine import OccupancyEngine
 
 
-def build_router(occupancy_engine: OccupancyEngine, analytics_engine: AnalyticsEngine) -> APIRouter:
+def build_router(
+    occupancy_engine: OccupancyEngine,
+    analytics_engine: AnalyticsEngine,
+    health_provider: Callable[[], Dict],
+) -> APIRouter:
     router = APIRouter()
 
     @router.get("/health")
     def health():
-        return {"status": "ok", "last_update_ts": occupancy_engine.last_update_ts}
+        return health_provider()
 
     @router.get("/slots")
     def get_slots():

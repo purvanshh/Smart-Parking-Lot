@@ -18,9 +18,10 @@ class AppSettings(BaseSettings):
     # Runtime
     stub_mode: bool = Field(default=False, alias="STUB_MODE")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    demo_mode: bool = Field(default=False, alias="DEMO_MODE")
 
     # Paths
-    video_path: str = Field(default="data/parking_video.mp4", alias="VIDEO_PATH")
+    video_path: str = Field(default="data/parking_video.MOV", alias="VIDEO_PATH")
     slots_path: str = Field(default="app/slots/slots.json", alias="SLOTS_PATH")
     # Use Ultralytics model name by default so weights auto-download/cache on first run.
     model_path: str = Field(default="yolov8n.pt", alias="MODEL_PATH")
@@ -44,6 +45,7 @@ class AppSettings(BaseSettings):
     # Occupancy smoothing
     debounce_frames: int = Field(default=4, alias="DEBOUNCE_FRAMES")
     clear_timeout_s: float = Field(default=1.5, alias="CLEAR_TIMEOUT_S")
+    min_track_age_s: float = Field(default=0.0, alias="MIN_TRACK_AGE_S")
 
     # Analytics / Alerts
     busiest_slots_k: int = Field(default=3, alias="BUSIEST_SLOTS_K")
