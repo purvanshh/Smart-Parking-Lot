@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">🅿️ Smart Parking Lot</h1>
+  <h1 align="center">Smart Parking Lot</h1>
   <p align="center">
     <strong>Real-time parking occupancy detection & analytics powered by computer vision</strong>
   </p>
