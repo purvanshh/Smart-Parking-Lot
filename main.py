@@ -10,6 +10,7 @@ from typing import List
 from fastapi import FastAPI
 
 from app.api.routes import build_router
+from app.analytics.engine import AnalyticsEngine
 from app.detection.detector import Detector, DetectorConfig
 from app.occupancy.engine import OccupancyEngine, TrackedObject
 from app.slots.slot_manager import SlotManager
@@ -30,6 +31,10 @@ FRAME_STRIDE = int(os.getenv("FRAME_STRIDE", "3"))
 SLOTS_PATH = Path("app/slots/slots.json")
 VIDEO_PATH = Path("data/parking_video.mp4")
 MODEL_PATH = os.getenv("MODEL_PATH", "models/yolov8n.pt")
+ANALYTICS_PERIOD_S = float(os.getenv("ANALYTICS_PERIOD_S", "2.0"))
+BUSY_SLOTS_K = int(os.getenv("BUSIEST_SLOTS_K", "3"))
+OVERSTAY_THRESHOLD_S = float(os.getenv("OVERSTAY_THRESHOLD_S", "90"))
+ALMOST_FULL_THRESHOLD = float(os.getenv("ALMOST_FULL_THRESHOLD", "0.10"))
 
 
 occupancy_engine = OccupancyEngine()
@@ -38,9 +43,15 @@ occupancy_engine.bootstrap_slots(slot_manager)
 
 tracker = Tracker()
 detector = None
+analytics_engine = AnalyticsEngine(
+    occupancy_engine=occupancy_engine,
+    busiest_k=BUSY_SLOTS_K,
+    overstay_threshold_s=OVERSTAY_THRESHOLD_S,
+    almost_full_threshold=ALMOST_FULL_THRESHOLD,
+)
 
 app = FastAPI(title="Smart Parking Occupancy & Availability API")
-app.include_router(build_router(occupancy_engine))
+app.include_router(build_router(occupancy_engine, analytics_engine))
 
 
 def pipeline_loop() -> None:
@@ -73,11 +84,16 @@ def pipeline_loop() -> None:
         logger.warning("STUB_MODE enabled: pipeline will not run detection/video.")
 
     frame_idx = 0
+    last_analytics_ts = 0.0
     while True:
         try:
             if STUB_MODE:
                 # Keeps API stable and predictable when booting without runtime deps.
-                occupancy_engine.update([], slot_manager)
+                now_ts = time.time()
+                occupancy_engine.update([], slot_manager, now_ts=now_ts)
+                if (now_ts - last_analytics_ts) >= ANALYTICS_PERIOD_S:
+                    analytics_engine.update(now_ts=now_ts)
+                    last_analytics_ts = now_ts
                 time.sleep(0.5)
                 continue
 
@@ -99,6 +115,10 @@ def pipeline_loop() -> None:
             detections = detector.detect(frame)
             tracked_objects: List[TrackedObject] = tracker.update(detections, now_ts=now_ts)
             occupancy_engine.update(tracked_objects, slot_manager, now_ts=now_ts)
+
+            if (now_ts - last_analytics_ts) >= ANALYTICS_PERIOD_S:
+                analytics_engine.update(now_ts=now_ts)
+                last_analytics_ts = now_ts
 
             logger.info(
                 "Processed frame=%s detections=%s tracked=%s occupied=%s/%s",
