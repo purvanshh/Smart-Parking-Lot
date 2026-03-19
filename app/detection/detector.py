@@ -10,7 +10,8 @@ Box = Tuple[float, float, float, float, float, int]  # x1,y1,x2,y2,conf,cls
 @dataclass
 class DetectorConfig:
     model_path: str = "yolov8n.pt"
-    conf: float = 0.25
+    # Confidence threshold applied by the model AND re-checked post-filtering.
+    conf: float = 0.3
     vehicle_class_ids: Tuple[int, ...] = (2, 3, 5, 7)  # car, motorcycle, bus, truck (COCO)
 
 
@@ -40,6 +41,8 @@ class Detector:
                 continue
             x1, y1, x2, y2 = (float(v) for v in b.xyxy[0].tolist())
             conf = float(b.conf.item())
+            if conf < self.config.conf:
+                continue
             boxes.append((x1, y1, x2, y2, conf, cls_id))
         return boxes
 
