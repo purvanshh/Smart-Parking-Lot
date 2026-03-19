@@ -29,8 +29,10 @@ STUB_MODE = os.getenv("STUB_MODE", "0") == "1"
 FRAME_STRIDE = int(os.getenv("FRAME_STRIDE", "3"))
 
 SLOTS_PATH = Path("app/slots/slots.json")
-VIDEO_PATH = Path("data/parking_video.mp4")
-MODEL_PATH = os.getenv("MODEL_PATH", "models/yolov8n.pt")
+VIDEO_PATH = Path("data/parking_video.MOV")
+# Default to Ultralytics model name so weights auto-download/cache on first run.
+MODEL_PATH = os.getenv("MODEL_PATH", "yolov8n.pt")
+DETECTION_CONF = float(os.getenv("DETECTION_CONF", "0.3"))
 ANALYTICS_PERIOD_S = float(os.getenv("ANALYTICS_PERIOD_S", "2.0"))
 BUSY_SLOTS_K = int(os.getenv("BUSIEST_SLOTS_K", "3"))
 OVERSTAY_THRESHOLD_S = float(os.getenv("OVERSTAY_THRESHOLD_S", "90"))
@@ -72,13 +74,13 @@ def pipeline_loop() -> None:
 
         # Load model inside the background thread to avoid slowing FastAPI startup.
         global detector
-        detector = Detector(DetectorConfig(model_path=MODEL_PATH, conf=0.3))
+        detector = Detector(DetectorConfig(model_path=MODEL_PATH, conf=DETECTION_CONF))
 
         cap = cv2.VideoCapture(str(VIDEO_PATH))
         if not cap.isOpened():
             raise RuntimeError(f"Could not open video at {VIDEO_PATH}")
         logger.info("Video opened: %s", VIDEO_PATH)
-        logger.info("Detector loaded: %s (conf>=0.3, vehicle classes only)", MODEL_PATH)
+        logger.info("Detector loaded: %s (conf>=%.2f, vehicle classes only)", MODEL_PATH, DETECTION_CONF)
         logger.info("Frame stride: %s", FRAME_STRIDE)
     else:
         logger.warning("STUB_MODE enabled: pipeline will not run detection/video.")

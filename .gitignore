@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Runtime artifacts
+*.log
+
+# Model artifacts (keep folder, ignore large binaries)
+models/*.pt
+models/*.onnx
+!models/.gitkeep
+
+# Data artifacts (do not commit videos/datasets)
+data/*
+!data/.gitkeep
+!data/README.md
+

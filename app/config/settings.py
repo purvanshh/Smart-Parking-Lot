@@ -22,7 +22,8 @@ class AppSettings(BaseSettings):
     # Paths
     video_path: str = Field(default="data/parking_video.mp4", alias="VIDEO_PATH")
     slots_path: str = Field(default="app/slots/slots.json", alias="SLOTS_PATH")
-    model_path: str = Field(default="models/yolov8n.pt", alias="MODEL_PATH")
+    # Use Ultralytics model name by default so weights auto-download/cache on first run.
+    model_path: str = Field(default="yolov8n.pt", alias="MODEL_PATH")
 
     # Pipeline performance
     frame_stride: int = Field(default=3, alias="FRAME_STRIDE")

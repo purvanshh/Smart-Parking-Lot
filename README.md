@@ -159,14 +159,68 @@ pip install -r requirements.txt
 
 ### 3) Provide inputs
 
-- **Video**: `data/parking_video.mp4`
+- **Video**: `data/parking_video.MOV` (or update `VIDEO_PATH` if different)
 - **Slots**: `app/slots/slots.json` (slot_id → polygon vertices)
-- **Model**: `models/yolov8n.pt` (or set `MODEL_PATH` to another YOLOv8 weight file)
+- **Model**: auto-download via Ultralytics (default `MODEL_PATH=yolov8n.pt`)
+  - First run downloads + caches weights automatically.
+  - If you want to use local weights, set `MODEL_PATH=/path/to/weights.pt`.
+
+### 3.1) Data source (not committed to repo)
+
+Project video/data files are intentionally not uploaded to Git.
+
+Download from OneDrive and place files in `data/`:
+
+- [Parking data (OneDrive)](https://onedrive.live.com/?redeem=aHR0cHM6Ly8xZHJ2Lm1zL2YvcyFBanVMOExkRmtDaFppT1ZpcjB2Uk1QUGpMdUZUV2c_ZT1oaTJoZTM&id=59289045B7F08B3B!144101&cid=59289045B7F08B3B&sb=name&sd=1)
 
 ### 4) Run the API
 
 ```bash
 uvicorn main:app --reload
+```
+
+## Quick run commands + expected output
+
+### Validate video is readable by OpenCV
+
+```bash
+python3 -c "import cv2; cap=cv2.VideoCapture('data/parking_video.MOV'); print('opened=', cap.isOpened())"
+```
+
+Expected:
+
+```text
+opened= True
+```
+
+### Start server with explicit paths
+
+```bash
+MODEL_PATH="models/yolov8n.pt" VIDEO_PATH="data/parking_video.MOV" uvicorn main:app --reload
+```
+
+Expected logs (sample):
+
+```text
+INFO:     Uvicorn running on http://127.0.0.1:8000
+INFO smart_parking - Video opened: data/parking_video.MOV
+INFO smart_parking - Detector loaded: models/yolov8n.pt
+INFO smart_parking - Processed frame=... detections=... tracked=...
+```
+
+### Check live endpoints
+
+```bash
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/slots
+curl http://127.0.0.1:8000/summary
+curl http://127.0.0.1:8000/analytics
+```
+
+Expected (example):
+
+```json
+{"status":"ok","last_update_ts":1710000000.12}
 ```
 
 ## Configuration (deployment-friendly)
@@ -212,6 +266,8 @@ main.py
 requirements.txt
 README.md
 ```
+
+> `data/` and model binaries are gitignored to keep the repository lightweight.
 
 ## Limitations (intentional, honest)
 
